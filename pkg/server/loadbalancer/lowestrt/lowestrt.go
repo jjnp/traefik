@@ -25,22 +25,52 @@ type LrtBalancer struct {
 	mutex   *sync.Mutex
 	servers []*server
 
+	lrtSum map[*server]int
+	lrtCounter map[*server]int
+	lrtChooser *LRTChooser
+	lrtMutex map[*server]*sync.Mutex
+
 	log *log.Logger
+
+	quitLrtCalculation chan struct{}
 }
 
 func New(fwd http.Handler, cfg *dynamic.LowestResponseTime) (*LrtBalancer, error) {
-	return &LrtBalancer{
+	balancer := LrtBalancer{
 		fwd: fwd,
 		cfg: cfg,
 
 		mutex:   &sync.Mutex{},
 		servers: []*server{},
-	}, nil
 
+		lrtSum: make(map[*server]int),
+		lrtCounter: make(map[*server]int),
+		lrtMutex: make(map[*server]*sync.Mutex),
+		lrtChooser: NewLRTChooser(cfg.Epsilon),
+	}
+	balancer.startRegularRecalculation(balancer.cfg.Window)
+
+	return &balancer, nil
 }
 
 func (lb *LrtBalancer) NextServer() *server {
-	return lb.servers[0]
+	return lb.lrtChooser.Pick()
+}
+
+func (lb *LrtBalancer) startRegularRecalculation(interval time.Duration) {
+	lb.quitLrtCalculation = make(chan struct{})
+	ticker := time.NewTicker(interval)
+	go func() {
+		for {
+			select {
+				case <- ticker.C:
+					lb.recalculateWeights()
+				case <- lb.quitLrtCalculation:
+					ticker.Stop()
+					return
+			}
+		}
+	}()
 }
 
 func (lb *LrtBalancer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -61,6 +91,14 @@ func (lb *LrtBalancer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// send requests to other servers.
 	// oxy's Rebalancer seems to generalize this by adapting weights, which may simplify balancing.
 	log.Printf("serving on %s took %d ms\n", s.url, duration)
+	lb.logRequestDuration(s, int(duration)) // this type conversion should be fine since the millisecond value can't get large enough to cause problems
+}
+
+func (lb *LrtBalancer) logRequestDuration(server *server, duration int) {
+	lb.lrtMutex[server].Lock()
+	defer lb.lrtMutex[server].Unlock()
+	lb.lrtSum[server] += duration
+	lb.lrtCounter[server]++
 }
 
 func (lb *LrtBalancer) Servers() []*url.URL {
@@ -84,6 +122,13 @@ func (lb *LrtBalancer) RemoveServer(u *url.URL) error {
 	}
 
 	lb.servers = append(lb.servers[:index], lb.servers[index+1:]...)
+	lb.lrtMutex[e].Lock()
+	delete(lb.lrtCounter, e)
+	delete(lb.lrtSum, e)
+	lb.lrtChooser.RemoveServer(e)
+	lb.lrtMutex[e].Unlock()
+	delete(lb.lrtMutex, e)
+
 	return nil
 }
 
@@ -103,19 +148,53 @@ func (lb *LrtBalancer) UpsertServer(u *url.URL, _ ...roundrobin.ServerOption) er
 	srv := &server{url: utils.CopyURL(u)}
 
 	lb.servers = append(lb.servers, srv)
+	lb.lrtMutex[srv] = &sync.Mutex{}
+	lb.lrtMutex[srv].Lock()
+	defer lb.lrtMutex[srv].Unlock()
+	lb.lrtSum[srv] = 1
+	lb.lrtCounter[srv] = 1
+	lb.lrtChooser.AddServer(srv)
+
 	return nil
 }
 
 func (lb *LrtBalancer) findServerByURL(u *url.URL) (*server, int) {
-	if len(lb.servers) == 0 {
+	return findServerInListByUrl(lb.servers, u)
+}
+
+func findServerInListByUrl(list []*server, u *url.URL) (*server, int) {
+	if len(list) == 0 {
 		return nil, -1
 	}
-	for i, s := range lb.servers {
+	for i, s := range list {
 		if urlEquals(u, s.url) {
 			return s, i
 		}
 	}
 	return nil, -1
+}
+
+func (lb *LrtBalancer) recalculateWeights() {
+	lb.mutex.Lock()
+	defer lb.mutex.Unlock()
+	for _, l := range lb.lrtMutex {
+		l.Lock()
+		defer l.Unlock()
+	}
+
+	weights := calculateWeights(lb.lrtSum, lb.lrtCounter)
+	lb.resetCalculationValues()
+	lb.lrtChooser.PatchWeights(weights)
+	//for s, w := range weights {
+	//	log.Printf("%s now has weight %d\n", s.url, w)
+	//}
+}
+
+func (lb *LrtBalancer) resetCalculationValues() {
+	for k, _ := range lb.lrtSum {
+		lb.lrtSum[k] = 1
+		lb.lrtCounter[k] = 1
+	}
 }
 
 func urlEquals(a, b *url.URL) bool {
