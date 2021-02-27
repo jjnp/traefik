@@ -158,6 +158,7 @@ type Algorithm struct {
 	RoundRobin         *RoundRobin         `json:"roundRobin,omitempty" toml:"roundRobin,omitempty" yaml:"roundRobin,omitempty"`
 	LowestResponseTime *LowestResponseTime `json:"lowestResponseTime,omitempty" toml:"lowestResponseTime,omitempty" yaml:"lowestResponseTime,omitempty"`
 	LeastUtilized      *LeastUtilized      `json:"leastUtilized,omitempty" toml:"leastUtilized,omitempty" yaml:"leastUtilized,omitempty"`
+	Custom			   *Custom				`json:"custom,omitempty" toml:"custom,omitempty" yaml:"custom,omitempty"`
 }
 
 // +k8s:deepcopy-gen=true
@@ -171,6 +172,12 @@ type LowestResponseTime struct {
 	Epsilon float64       `json:"epsilon,omitempty" toml:"epsilon,omitempty" yaml:"epsilon,omitempty"`
 	Window  time.Duration `json:"window,omitempty" toml:"window,omitempty" yaml:"window,omitempty"`
 }
+
+type Custom struct {
+
+}
+
+
 
 func (m *LowestResponseTime) SetDefaults() {
 	m.Epsilon = 10
