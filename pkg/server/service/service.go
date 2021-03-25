@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/containous/traefik/v2/pkg/server/loadbalancer/custom"
 	"github.com/containous/traefik/v2/pkg/server/loadbalancer/lowestrt"
 	"net/http"
 	"net/http/httputil"
@@ -200,6 +201,8 @@ func (m *Manager) getLoadBalancerServiceHandler(
 		balancer, err = m.getLowestResponseTimeBalancer(ctx, serviceName, service, handler)
 	case algo.LeastUtilized != nil:
 		balancer, err = m.getLeastUtilizedBalancer(ctx, serviceName, service, handler)
+	case algo.Custom != nil:
+		balancer, err = m.getCustomBalancer(ctx, serviceName, service, handler)
 	default:
 		balancer, err = m.getRoundRobinLoadBalancer(ctx, serviceName, service, handler)
 	}
@@ -352,6 +355,20 @@ func (m *Manager) getLowestResponseTimeBalancer(ctx context.Context, serviceName
 	}
 
 	return lb, err
+}
+
+func (m *Manager) getCustomBalancer(ctx context.Context, serviceName string, service *dynamic.ServersLoadBalancer, fwd http.Handler) (healthcheck.BalancerHandler, error) {
+	logger := log.FromContext(ctx)
+	logger.Debug("creating custom load balancer")
+	clb, err := custom.New(fwd, service.Algorithm.Custom, ctx)
+	if err != nil {
+		return nil, err
+	}
+	clbsu := healthcheck.NewLBStatusUpdater(clb, m.configs[serviceName]) // TODO: Find out what m.configs is?
+	if err := m.upsertServers(ctx, clbsu, service.Servers); err != nil {
+		return nil, fmt.Errorf("error configuring load balancer for service %s: %w", serviceName, err)
+	}
+	return clb, err
 }
 
 func (m *Manager) getLeastUtilizedBalancer(ctx context.Context, serviceName string, service *dynamic.ServersLoadBalancer, fwd http.Handler) (healthcheck.BalancerHandler, error) {

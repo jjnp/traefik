@@ -170,11 +170,40 @@ type RoundRobin struct {
 
 type LowestResponseTime struct {
 	Epsilon float64       `json:"epsilon,omitempty" toml:"epsilon,omitempty" yaml:"epsilon,omitempty"`
-	Window  time.Duration `json:"window,omitempty" toml:"window,omitempty" yaml:"window,omitempty"`
+	Window  time.Duration `json:"Window,omitempty" toml:"Window,omitempty" yaml:"Window,omitempty"`
+}
+
+func (c *Custom) SetDefaults()  {
+	if c.UpdateFrequencySeconds == 0 {
+		c.UpdateFrequencySeconds = 15
+	}
+	// TODO: This needs to be updated when other metrics providers are added. If none are specified LRT should be added as a default
+	if c.LowestResponseTime == nil {
+		c.LowestResponseTime = &struct{
+			Window int `json:"window" toml:"window" yaml:"window"`
+			Scaling float64 `json:"scaling" toml:"scaling" yaml:"scaling"`
+			Weight int `json:"weight" toml:"weight" yaml:"weight"`
+		}{Window: 15, Scaling: 1.0, Weight: 10}
+	} else {
+		if c.LowestResponseTime.Scaling <= 0 {
+			c.LowestResponseTime.Scaling = 1
+		}
+		if c.LowestResponseTime.Window <= 0 {
+			c.LowestResponseTime.Window = 15
+		}
+		if c.LowestResponseTime.Weight < 1 || c.LowestResponseTime.Window > 10 {
+			c.LowestResponseTime.Weight = 10
+		}
+	}
 }
 
 type Custom struct {
-
+	UpdateFrequencySeconds	int	`json:"updateFrequencySeconds,omitempty" toml:"updateFrequencySeconds,omitempty" yaml:"updateFrequencySeconds,omitempty"`
+	LowestResponseTime *struct{
+		Window int `json:"window" toml:"window" yaml:"window"`
+		Scaling float64 `json:"scaling" toml:"scaling" yaml:"scaling"`
+		Weight int `json:"weight" toml:"weight" yaml:"weight"`
+	} `json:"lowestResponseTime,omitempty" toml:"lowestResponseTime,omitempty" yaml:"lowestResponseTime,omitempty"`
 }
 
 
@@ -188,7 +217,7 @@ func (m *LowestResponseTime) SetDefaults() {
 
 type LeastUtilized struct {
 	Epsilon float64       `json:"epsilon,omitempty" toml:"epsilon,omitempty" yaml:"epsilon,omitempty"`
-	Window  time.Duration `json:"window,omitempty" toml:"window,omitempty" yaml:"window,omitempty"`
+	Window  time.Duration `json:"Window,omitempty" toml:"Window,omitempty" yaml:"Window,omitempty"`
 }
 
 func (m *LeastUtilized) SetDefaults() {

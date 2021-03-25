@@ -2,6 +2,7 @@ package custom
 
 import (
 	"errors"
+	"math"
 	"net/url"
 	"sync"
 )
@@ -21,8 +22,10 @@ func NewWRR(serversByWeight map[*url.URL]int) (*WRR, error) {
 	wrr := WRR{
 		mtx:     sync.Mutex{},
 	}
-	servers := make([]*url.URL, len(serversByWeight))
-	weights := make([]int, len(serversByWeight))
+	//servers := make([]*url.URL, len(serversByWeight))
+	servers := []*url.URL{}
+	//weights := make([]int, len(serversByWeight))
+	weights := []int{}
 	for k, v := range serversByWeight {
 		servers = append(servers, k)
 		weights = append(weights, v) // TODO possible change this to simple assignment for better performance
@@ -45,15 +48,48 @@ func NewWRR(serversByWeight map[*url.URL]int) (*WRR, error) {
 
 func gcd(ns []int) (int, error) {
 	// TODO: Implement this property in order to facilitate faster rotation of servers
-	return 1, nil
+	max_possible, err := min(ns)
+	if err != nil {
+		return -1, err
+	}
+	gcd := 1
+	// We move downward, because this way we can potentially break out of the loop earlier
+	// I benchmarked it and it's about twice as fast
+	for i := max_possible; i >= 1; i-- {
+		valid := true
+		for _, n := range ns {
+			if n % i != 0 {
+				valid = false
+				break
+			}
+		}
+		if valid && i > 1{
+			gcd = i
+			break
+		}
+	}
+	return gcd, nil
+}
+
+func min(ns []int) (int, error) {
+	if ns == nil {
+		return -1, errors.New("cannot calculate min of nil or empty slice")
+	}
+	min := math.MaxInt64
+	for _, cur := range ns {
+		if cur < min {
+			min = cur
+		}
+	}
+	return min, nil
 }
 
 func max(ns []int) (int, error) {
-	if ns == nil || len(ns) == 0 {
+	if ns == nil {
 		return -1, errors.New("cannot calculate max of nil or empty slice")
 	}
-	max := ns[0]
-	for cur := range ns {
+	max := 0
+	for _, cur := range ns {
 		if cur > max {
 			max = cur
 		}
