@@ -17,6 +17,7 @@ type LowestRT struct {
 	window time.Duration
 	scaling float64
 	mtx sync.Mutex
+	timingMtx sync.Mutex
 }
 
 type timingKey struct {
@@ -43,6 +44,8 @@ func expMovingAvg(value, oldValue, deltaMs, windowMs float64) float64 {
 }
 
 func (l *LowestRT) preRequestHandler(server *url.URL, req *http.Request)  {
+	l.timingMtx.Lock()
+	defer l.timingMtx.Unlock()
 	l.timingBuffer[timingKey{
 		s: server,
 		r: req,
@@ -50,6 +53,8 @@ func (l *LowestRT) preRequestHandler(server *url.URL, req *http.Request)  {
 }
 
 func (l *LowestRT) postRequestHandler(server *url.URL, req *http.Request)  {
+	l.timingMtx.Lock()
+	defer l.timingMtx.Unlock()
 	t2 := time.Now()
 	key := timingKey{
 		s: server,

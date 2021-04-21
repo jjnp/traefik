@@ -2,8 +2,11 @@ package custom
 
 import (
 	"errors"
+	"fmt"
+	"github.com/containous/traefik/v2/pkg/log"
 	"math"
 	"net/url"
+	"strconv"
 	"sync"
 )
 
@@ -18,7 +21,7 @@ type WRR struct {
 	n int
 }
 
-func NewWRR(serversByWeight map[*url.URL]int) (*WRR, error) {
+func NewWRR(serversByWeight map[*url.URL]int, log log.Logger) (*WRR, error) {
 	wrr := WRR{
 		mtx:     sync.Mutex{},
 	}
@@ -43,11 +46,22 @@ func NewWRR(serversByWeight map[*url.URL]int) (*WRR, error) {
 	wrr.weights = weights
 	wrr.n = len(servers)
 
+	log.Infof("Changing WRR weights. %s", buildLogString(&wrr))
+	fmt.Println(buildLogString(&wrr))
 	return &wrr, nil
 }
 
+func buildLogString(w *WRR) string {
+	var s string
+	s += "gcd: " + strconv.FormatInt(int64(w.gcd), 10) + ", weights: { "
+	for i, server := range w.servers {
+		s += server.Host + ": " + strconv.FormatInt(int64(w.weights[i]), 10) + ", "
+	}
+	s += "}"
+	return s
+}
+
 func gcd(ns []int) (int, error) {
-	// TODO: Implement this property in order to facilitate faster rotation of servers
 	max_possible, err := min(ns)
 	if err != nil {
 		return -1, err

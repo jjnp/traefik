@@ -55,7 +55,7 @@ func New(fwd http.Handler, cfg *dynamic.Custom, ctx context.Context) (*CustomBal
 		updateFrequency: time.Duration(cfg.UpdateFrequencySeconds) * time.Second,
 		log: log.FromContext(ctx),
 	}
-	wrr, err := NewWRR(make(map[*url.URL]int))
+	wrr, err := NewWRR(make(map[*url.URL]int), c.log)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +148,7 @@ func (c *CustomBalancer) TriggerWeightUpdate() {
 }
 
 func (c *CustomBalancer) updateWeights() {
-	log.Info("updating weights for wrr")
+	c.log.Info("updating weights for wrr")
 	weightSum := make(map[*url.URL]int)
 	for _, p := range c.metricsProviders {
 		if weights, err := p.GetWeights(); err == nil {
@@ -157,8 +157,8 @@ func (c *CustomBalancer) updateWeights() {
 			}
 		}
 	}
-	log.Info(weightSum)
-	wrr, err := NewWRR(weightSum)
+	c.log.Info(weightSum)
+	wrr, err := NewWRR(weightSum, c.log)
 	if err == nil {
 		c.wrr = *wrr
 	}
