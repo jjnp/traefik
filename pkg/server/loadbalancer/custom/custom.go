@@ -13,22 +13,6 @@ import (
 	"time"
 )
 
-/**
-Todos:
- - Create struct that implements the go loadbalancer interface DONE
- - Create metrics provider interface DONE
- - Link up to the WRR provider DONE
- - Define the config struct
-
-
-it must
- - register pre-post callback DONE
- - provide metric update poll trigger DONE
- - handle Req DONE
- - upsert srv DONE
- - remove srv DONE
- */
-
 type CustomBalancer struct {
 	servers []*url.URL
 	serversMutex sync.Mutex
@@ -87,9 +71,6 @@ func (c *CustomBalancer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 func (c *CustomBalancer) shouldUpdateWeights() bool {
-	//now := time.Now()
-	//delta := now.Sub(c.lastUpdate)
-	//return delta >= c.updateFrequency
 	return time.Now().Sub(c.lastUpdate) >= c.updateFrequency
 }
 
@@ -129,10 +110,6 @@ func (c *CustomBalancer) UpsertServer(u *url.URL, options ...roundrobin.ServerOp
 	return nil
 }
 
-func (c *CustomBalancer) next() *url.URL  {
-	panic("implement me")
-}
-
 func (c *CustomBalancer) RegisterPreRequestCallback(cb func (server *url.URL, req *http.Request)()) error {
 	c.preReqCBs = append(c.preReqCBs, cb)
 	return nil
@@ -148,7 +125,6 @@ func (c *CustomBalancer) TriggerWeightUpdate() {
 }
 
 func (c *CustomBalancer) updateWeights() {
-	c.log.Info("updating weights for wrr")
 	weightSum := make(map[*url.URL]int)
 	for _, p := range c.metricsProviders {
 		if weights, err := p.GetWeights(); err == nil {
@@ -157,7 +133,6 @@ func (c *CustomBalancer) updateWeights() {
 			}
 		}
 	}
-	c.log.Info(weightSum)
 	wrr, err := NewWRR(weightSum, c.log)
 	if err == nil {
 		c.wrr = *wrr

@@ -2,11 +2,9 @@ package custom
 
 import (
 	"errors"
-	"fmt"
 	"github.com/containous/traefik/v2/pkg/log"
 	"math"
 	"net/url"
-	"strconv"
 	"sync"
 )
 
@@ -25,13 +23,11 @@ func NewWRR(serversByWeight map[*url.URL]int, log log.Logger) (*WRR, error) {
 	wrr := WRR{
 		mtx:     sync.Mutex{},
 	}
-	//servers := make([]*url.URL, len(serversByWeight))
 	servers := []*url.URL{}
-	//weights := make([]int, len(serversByWeight))
 	weights := []int{}
 	for k, v := range serversByWeight {
 		servers = append(servers, k)
-		weights = append(weights, v) // TODO possible change this to simple assignment for better performance
+		weights = append(weights, v)
 	}
 	max, errmax := max(weights)
 	gcd, errgcd := gcd(weights)
@@ -45,20 +41,16 @@ func NewWRR(serversByWeight map[*url.URL]int, log log.Logger) (*WRR, error) {
 	wrr.servers = servers
 	wrr.weights = weights
 	wrr.n = len(servers)
-
-	log.Infof("Changing WRR weights. %s", buildLogString(&wrr))
-	fmt.Println(buildLogString(&wrr))
+	logWeights(&wrr, log)
 	return &wrr, nil
 }
 
-func buildLogString(w *WRR) string {
-	var s string
-	s += "gcd: " + strconv.FormatInt(int64(w.gcd), 10) + ", weights: { "
+func logWeights(w *WRR, logger log.Logger) {
+	weightMap := map[string]interface{}{}
 	for i, server := range w.servers {
-		s += server.Host + ": " + strconv.FormatInt(int64(w.weights[i]), 10) + ", "
+		weightMap[server.Host] = w.weights[i]
 	}
-	s += "}"
-	return s
+	logger.WithField("weights", weightMap).Info("updating weights")
 }
 
 func gcd(ns []int) (int, error) {
